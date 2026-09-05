@@ -3,9 +3,17 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: 'AKSOS — Making African ecosystems legible',
+  description: 'AKSOS investigates whether better ecosystem visibility can improve understanding and participation.',
+  generator: 'AKSOS',
+  metadataBase: new URL('https://aksos.org'),
+  alternates: { canonical: '/' },
+  openGraph: {
+    title: 'AKSOS — Making African ecosystems legible',
+    description: 'A research and development initiative exploring visibility, understanding, and participation.',
+    type: 'website',
+    url: 'https://aksos.org',
+  },
   icons: {
     icon: [
       {
