@@ -19,11 +19,26 @@ function Graph({ mode = 'ecosystem', active }: { mode?: 'ecosystem' | 'atis' | '
     const ctx = canvas.getContext('2d')!
     let frame = 0
     let raf = 0
-    const draw = () => {
+    let drawRaf = 0
+    let width = 0
+    let height = 0
+    const resizeCanvas = () => {
       const dpr = window.devicePixelRatio || 1
-      const { width, height } = parent.getBoundingClientRect()
-      canvas.width = width * dpr; canvas.height = height * dpr
+      const rect = parent.getBoundingClientRect()
+      const nextWidth = Math.max(1, Math.round(rect.width))
+      const nextHeight = Math.max(1, Math.round(rect.height))
+      const pixelWidth = Math.round(nextWidth * dpr)
+      const pixelHeight = Math.round(nextHeight * dpr)
+      if (pixelWidth === canvas.width && pixelHeight === canvas.height) return
+      width = nextWidth
+      height = nextHeight
+      canvas.width = pixelWidth
+      canvas.height = pixelHeight
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+    const draw = () => {
+      resizeCanvas()
+      if (!width || !height) return
       ctx.clearRect(0, 0, width, height)
       ctx.fillStyle = '#f7f7f4'; ctx.fillRect(0, 0, width, height)
       const pts = nodes.map((n, i) => ({ x: n[1] / 100 * width, y: n[2] / 100 * height, label: n[0], i }))
@@ -34,8 +49,18 @@ function Graph({ mode = 'ecosystem', active }: { mode?: 'ecosystem' | 'atis' | '
       if (mode === 'atis') { ctx.strokeStyle = '#11110f'; ctx.setLineDash([3,3]); ctx.strokeRect(width*.11,height*.12,width*.76,height*.72); ctx.setLineDash([]) }
       if (!paused) { frame += 1; raf = requestAnimationFrame(draw) }
     }
-    const observer = new ResizeObserver(draw); observer.observe(parent); draw()
-    return () => { observer.disconnect(); cancelAnimationFrame(raf) }
+    const scheduleDraw = () => {
+      cancelAnimationFrame(drawRaf)
+      drawRaf = requestAnimationFrame(draw)
+    }
+    const observer = new ResizeObserver(scheduleDraw)
+    observer.observe(parent)
+    scheduleDraw()
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(raf)
+      cancelAnimationFrame(drawRaf)
+    }
   }, [active, mode, paused])
   return <div className="graph-shell"><canvas ref={ref} aria-label={`${mode} ecosystem graph`} role="img" /><button className="graph-toggle" onClick={() => setPaused(!paused)} aria-label={paused ? 'Play graph motion' : 'Pause graph motion'}>{paused ? <Play size={14}/> : <Pause size={14}/>}</button></div>
 }
