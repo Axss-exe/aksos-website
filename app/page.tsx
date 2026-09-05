@@ -53,11 +53,12 @@ function Graph({ mode = 'ecosystem', active }: { mode?: 'ecosystem' | 'atis' | '
       cancelAnimationFrame(drawRaf)
       drawRaf = requestAnimationFrame(draw)
     }
-    const observer = new ResizeObserver(scheduleDraw)
-    observer.observe(parent)
+    // The graph containers resize with the viewport, so a window listener avoids
+    // ResizeObserver feedback from canvas intrinsic-size updates.
+    window.addEventListener('resize', scheduleDraw, { passive: true })
     scheduleDraw()
     return () => {
-      observer.disconnect()
+      window.removeEventListener('resize', scheduleDraw)
       cancelAnimationFrame(raf)
       cancelAnimationFrame(drawRaf)
     }
