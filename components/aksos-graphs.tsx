@@ -1,71 +1,94 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, RotateCcw } from 'lucide-react'
 
-type Particle = { id: string; x: number; y: number; vx: number; vy: number; radius: number; cluster: number; label?: string; anchor?: boolean }
-type Link = { source: string; target: string }
-type Lens = { nodes: string[]; edges: Link[] }
+type Particle = { id: string; x: number; y: number; cluster: number; label?: string; anchor?: boolean }
+type Lens = { anchors: string[]; secondary: string[]; edges: [string, string][] }
+type Perspective = 'Investor' | 'Enterprise' | 'Researcher'
 
-const seed = (value: number) => {
-  const x = Math.sin(value * 12.9898) * 43758.5453
+const hash = (n: number) => {
+  const x = Math.sin(n * 91.173 + 17.41) * 43758.5453
   return x - Math.floor(x)
 }
 
-const PARTICLES: readonly Particle[] = Array.from({ length: 78 }, (_, index) => {
-  const cluster = index % 3
-  const centers = [[0.22, 0.35], [0.56, 0.58], [0.8, 0.28]][cluster]
-  const angle = seed(index + 4) * Math.PI * 2
-  const distance = 0.04 + seed(index + 12) * 0.2
-  const anchor = [0, 1, 2, 24, 25, 48, 49].includes(index)
-  const labels = ['MINISTRY', 'POLICY', 'PROJECT', 'ENTERPRISE', 'PEOPLE', 'CAPITAL', 'MARKET']
-  return { id: `particle-${index}`, x: Math.max(0.05, Math.min(0.95, centers[0] + Math.cos(angle) * distance)), y: Math.max(0.08, Math.min(0.9, centers[1] + Math.sin(angle) * distance)), vx: (seed(index + 30) - 0.5) * 0.00012, vy: (seed(index + 60) - 0.5) * 0.00012, radius: anchor ? 4.5 : 1.2 + seed(index + 90) * 1.2, cluster, label: anchor ? labels[[0, 1, 2, 3, 4, 5, 6].indexOf(index)] : undefined, anchor }
-})
-const ANCHORS = PARTICLES.filter((p) => p.anchor)
-const LINKS: readonly Link[] = [{ source: 'particle-0', target: 'particle-1' }, { source: 'particle-1', target: 'particle-2' }, { source: 'particle-2', target: 'particle-3' }, { source: 'particle-0', target: 'particle-24' }, { source: 'particle-24', target: 'particle-25' }, { source: 'particle-25', target: 'particle-48' }, { source: 'particle-48', target: 'particle-49' }]
-const LENSES: Record<string, Lens> = { Entrepreneur: { nodes: ['particle-24', 'particle-25', 'particle-2', 'particle-3'], edges: LINKS.slice(2, 5) }, Investor: { nodes: ['particle-5', 'particle-25', 'particle-3', 'particle-49'], edges: LINKS.slice(3) }, 'Policy analyst': { nodes: ['particle-0', 'particle-1', 'particle-2', 'particle-48'], edges: LINKS.slice(0, 3) }, 'Community builder': { nodes: ['particle-24', 'particle-25', 'particle-48'], edges: LINKS.slice(3) } }
+const PARTICLES: readonly Particle[] = Object.freeze(Array.from({ length: 88 }, (_, index) => {
+  const cluster = index % 5
+  const centers = [[.18, .25], [.39, .68], [.6, .31], [.77, .72], [.87, .24]] as const
+  const center = centers[cluster]
+  const ring = Math.floor(index / 5)
+  const angle = hash(index + 3) * Math.PI * 2
+  const radius = .025 + hash(index + 19) * (.07 + ring * .006)
+  const anchor = [0, 5, 18, 31, 45, 60, 74].includes(index)
+  const labels = ['INSTITUTION', 'POLICY', 'PROJECT', 'ENTERPRISE', 'CAPITAL', 'MARKET', 'PEOPLE']
+  return Object.freeze({ id: `p-${index}`, x: Math.min(.96, Math.max(.04, center[0] + Math.cos(angle) * radius)), y: Math.min(.94, Math.max(.06, center[1] + Math.sin(angle) * radius)), cluster, anchor, label: anchor ? labels[[0, 5, 18, 31, 45, 60, 74].indexOf(index)] : undefined })
+}))
 
-export function BrandMark({ atis = false, compact = false }: { atis?: boolean; compact?: boolean }) {
-  return <span className={`brand-mark ${compact ? 'brand-mark-compact' : ''}`}><img src={atis ? '/atis-symbol-traced.svg' : '/aksos-symbol-traced.svg'} alt="" /><span>{atis ? 'ATIS' : 'AKSOS'}</span></span>
+const EDGES: readonly [string, string][] = Object.freeze([
+  ['p-0', 'p-5'], ['p-5', 'p-18'], ['p-18', 'p-31'], ['p-31', 'p-45'], ['p-45', 'p-60'], ['p-60', 'p-74'],
+  ['p-5', 'p-31'], ['p-18', 'p-45'], ['p-31', 'p-60'], ['p-0', 'p-18'],
+])
+const PERSPECTIVES: Record<Perspective, Lens> = {
+  Investor: { anchors: ['p-45', 'p-60', 'p-74'], secondary: ['p-5', 'p-18', 'p-31'], edges: [EDGES[4], EDGES[5], EDGES[6]] },
+  Enterprise: { anchors: ['p-31', 'p-45', 'p-60'], secondary: ['p-18', 'p-74', 'p-5'], edges: [EDGES[3], EDGES[4], EDGES[8]] },
+  Researcher: { anchors: ['p-0', 'p-5', 'p-18'], secondary: ['p-31', 'p-45', 'p-60'], edges: [EDGES[0], EDGES[1], EDGES[2]] },
 }
 
-export function EcosystemCanvas({ mode = 'ecosystem', lens = 'Entrepreneur', onSelect }: { mode?: 'ecosystem' | 'atis' | 'rita' | 'perspective'; lens?: string; onSelect?: (id: string) => void }) {
+function useCanvasField(active: Set<string>, activeEdges: readonly [string, string][], options?: { drift?: boolean; labels?: boolean; onPick?: (id: string) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const stateRef = useRef({ hovered: '', paused: false, reduced: false, visible: true, stage: mode === 'rita' ? 0 : 4, start: 0, transition: 1 })
-  const [paused, setPaused] = useState(false)
-  const [stage, setStage] = useState(mode === 'rita' ? 0 : 4)
-  const target = mode === 'rita' ? { nodes: stage >= 3 ? ['particle-0', 'particle-1', 'particle-2', 'particle-3'] : [], edges: stage >= 2 ? LINKS.slice(0, 3) : [] } : (LENSES[lens] ?? LENSES.Entrepreneur)
-  const targetRef = useRef(target); targetRef.current = target
-  useEffect(() => { stateRef.current.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; stateRef.current.paused = paused }, [paused])
+  const hoverRef = useRef<string | null>(null)
+  const visibleRef = useRef(true)
+  const [hovered, setHovered] = useState<string | null>(null)
   useEffect(() => {
-    const canvas = canvasRef.current; const parent = canvas?.parentElement; if (!canvas || !parent) return
+    const canvas = canvasRef.current; const parent = canvas?.parentElement
+    if (!canvas || !parent) return
     const ctx = canvas.getContext('2d'); if (!ctx) return
-    let width = 1, height = 1, dpr = 1, raf = 0, disposed = false
-    const resize = () => { const rect = parent.getBoundingClientRect(); const nextW = Math.max(1, Math.floor(rect.width)); const nextH = Math.max(1, Math.floor(rect.height)); const nextDpr = Math.min(window.devicePixelRatio || 1, 2); if (nextW === width && nextH === height && nextDpr === dpr) return; width = nextW; height = nextH; dpr = nextDpr; canvas.width = width * dpr; canvas.height = height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0) }
-    const position = (p: Particle) => ({ x: p.x * width, y: p.y * height })
-    const draw = (now: number) => { if (disposed || !stateRef.current.visible) return; resize(); const state = stateRef.current; const motion = !state.reduced && !state.paused; ctx.clearRect(0, 0, width, height); const active = new Set(targetRef.current.nodes); const hovered = state.hovered
-      if (motion && mode === 'ecosystem') PARTICLES.forEach((p) => { p.x += p.vx; p.y += p.vy; if (p.x < .04 || p.x > .96) p.vx *= -1; if (p.y < .06 || p.y > .94) p.vy *= -1 })
-      ctx.lineWidth = .5; ctx.strokeStyle = 'rgba(26,26,26,.06)'; LINKS.forEach((link) => { const a = PARTICLES.find((p) => p.id === link.source); const b = PARTICLES.find((p) => p.id === link.target); if (!a || !b) return; const p = position(a); const q = position(b); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke() })
-      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(115,115,115,.72)'; targetRef.current.edges.forEach((link) => { const a = PARTICLES.find((p) => p.id === link.source); const b = PARTICLES.find((p) => p.id === link.target); if (!a || !b) return; const p = position(a); const q = position(b); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke() })
-      PARTICLES.forEach((particle) => { const p = position(particle); const isActive = active.has(particle.id); const isHovered = hovered === particle.id; const opacity = hovered ? (isHovered || LINKS.some((l) => (l.source === hovered || l.target === hovered) && (l.source === particle.id || l.target === particle.id)) ? 1 : .12) : mode === 'rita' && stage < 2 ? .15 : isActive ? .85 : .32; ctx.globalAlpha = opacity; ctx.fillStyle = particle.anchor ? '#fff' : '#1a1a1a'; ctx.strokeStyle = particle.anchor ? '#1a1a1a' : 'rgba(26,26,26,.24)'; ctx.lineWidth = particle.anchor ? 1 : .5; ctx.beginPath(); ctx.arc(p.x, p.y, particle.anchor ? 5 : particle.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); if ((particle.anchor && isActive) || (mode === 'rita' && stage >= 4 && particle.anchor)) { ctx.globalAlpha = 1; ctx.fillStyle = '#1a1a1a'; ctx.font = `${width < 520 ? 9 : 10}px monospace`; ctx.fillText(particle.label ?? '', p.x + 11, p.y + 3) } }); ctx.globalAlpha = 1; if (motion) raf = requestAnimationFrame(draw) }
-    const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw) }; const observer = new IntersectionObserver(([entry]) => { stateRef.current.visible = entry.isIntersecting; if (entry.isIntersecting) schedule(); else cancelAnimationFrame(raf) }, { threshold: .01 }); observer.observe(parent); window.addEventListener('resize', schedule, { passive: true }); schedule(); return () => { disposed = true; observer.disconnect(); window.removeEventListener('resize', schedule); cancelAnimationFrame(raf) }
-  }, [mode, paused, stage])
-  const hit = (event: React.PointerEvent<HTMLCanvasElement>) => { const canvas = canvasRef.current; if (!canvas) return; const rect = canvas.getBoundingClientRect(); const x = (event.clientX - rect.left) / rect.width; const y = (event.clientY - rect.top) / rect.height; const closest = PARTICLES.map((p) => ({ p, distance: Math.hypot(x - p.x, y - p.y) })).filter(({ distance }) => distance < .06).sort((a, b) => a.distance - b.distance)[0]?.p; stateRef.current.hovered = closest?.id ?? ''; if (closest?.anchor) onSelect?.(closest.id) }
-  const evaluate = () => { if (stage > 0) return; setStage(1); window.setTimeout(() => setStage(2), 300); window.setTimeout(() => setStage(3), 900); window.setTimeout(() => setStage(4), 1500) }
-  return <div className="graph-shell"><canvas ref={canvasRef} role="img" aria-label={`${mode} ecosystem field`} onPointerMove={hit} onPointerLeave={() => { stateRef.current.hovered = '' }} onClick={hit} /><button className="graph-toggle" onClick={() => setPaused((value) => !value)}>{paused ? 'PLAY' : 'PAUSE'}</button>{mode === 'rita' && <button className="graph-cta" onClick={evaluate} disabled={stage > 0}>Evaluate Coherence →</button>}</div>
+    let raf = 0; let stopped = false; let width = 1; let height = 1; let dpr = 1
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const resize = () => { const rect = parent.getBoundingClientRect(); const nextW = Math.max(1, Math.floor(rect.width)); const nextH = Math.max(1, Math.floor(rect.height)); const nextDpr = Math.min(2, window.devicePixelRatio || 1); if (nextW === width && nextH === height && nextDpr === dpr) return; width = nextW; height = nextH; dpr = nextDpr; canvas.width = width * dpr; canvas.height = height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0) }
+    const draw = (now: number) => { if (stopped || !visibleRef.current) return; resize(); ctx.clearRect(0, 0, width, height); const t = reduced || !options?.drift ? 0 : now * .000018
+      const point = (p: Particle) => ({ x: p.x * width + Math.sin(t + p.cluster) * 2, y: p.y * height + Math.cos(t + p.cluster * 1.4) * 2 })
+      ctx.lineWidth = .5; ctx.strokeStyle = 'rgba(26,26,26,.07)'; EDGES.forEach(([a, b]) => { const pa = PARTICLES.find((p) => p.id === a); const pb = PARTICLES.find((p) => p.id === b); if (!pa || !pb) return; const x = point(pa); const y = point(pb); ctx.beginPath(); ctx.moveTo(x.x, x.y); ctx.lineTo(y.x, y.y); ctx.stroke() })
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(115,115,115,.8)'; activeEdges.forEach(([a, b]) => { const pa = PARTICLES.find((p) => p.id === a); const pb = PARTICLES.find((p) => p.id === b); if (!pa || !pb) return; const x = point(pa); const y = point(pb); ctx.beginPath(); ctx.moveTo(x.x, x.y); ctx.lineTo(y.x, y.y); ctx.stroke() })
+      PARTICLES.forEach((particle) => { const p = point(particle); const isActive = active.has(particle.id); const isHover = hoverRef.current === particle.id; const opacity = hoverRef.current ? (isHover || EDGES.some(([a, b]) => (a === hoverRef.current || b === hoverRef.current) && (a === particle.id || b === particle.id)) ? 1 : .12) : isActive ? .78 : .22; ctx.globalAlpha = opacity; ctx.beginPath(); ctx.arc(p.x, p.y, particle.anchor && isActive ? 5.5 : 1.8, 0, Math.PI * 2); ctx.fillStyle = particle.anchor && isActive ? '#fff' : '#1a1a1a'; ctx.fill(); if (particle.anchor && isActive) { ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1; ctx.stroke(); if (options?.labels) { ctx.globalAlpha = 1; ctx.font = `${width < 520 ? 9 : 10}px monospace`; ctx.fillStyle = '#1a1a1a'; ctx.fillText(particle.label ?? '', p.x + 11, p.y + 3) } } }); ctx.globalAlpha = 1; raf = requestAnimationFrame(draw) }
+    const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw) }; const observer = new IntersectionObserver(([entry]) => { visibleRef.current = entry.isIntersecting; if (entry.isIntersecting) schedule(); else cancelAnimationFrame(raf) }); observer.observe(parent); window.addEventListener('resize', schedule, { passive: true }); schedule()
+    return () => { stopped = true; cancelAnimationFrame(raf); observer.disconnect(); window.removeEventListener('resize', schedule) }
+  }, [active, activeEdges, options?.drift, options?.labels])
+  const pick = (event: React.PointerEvent<HTMLCanvasElement>) => { const canvas = canvasRef.current; if (!canvas) return; const rect = canvas.getBoundingClientRect(); const x = (event.clientX - rect.left) / rect.width; const y = (event.clientY - rect.top) / rect.height; const match = PARTICLES.map((p) => ({ p, d: Math.hypot(p.x - x, p.y - y) })).filter(({ d }) => d < .07).sort((a, b) => a.d - b.d)[0]?.p.id ?? null; hoverRef.current = match; setHovered(match); if (match) options?.onPick?.(match) }
+  return { canvasRef, pick, hovered }
 }
 
-export function ProvenancePanel({ entity = 'POLICY', relationship = 'POLICY ↔ PROJECT' }: { entity?: string; relationship?: string }) { return <aside className="provenance" aria-live="polite"><span className="technical-note">SYS // RELATIONSHIP_TRACE</span><strong>{entity} // REVISION_2026</strong><span className="technical-note">RELATIONSHIP</span><strong>{relationship}</strong><p><b>FACT</b> Conceptual demonstration: inspectable relationships, not live intelligence.</p><p className="technical-note"><b>EVIDENCE</b> DEMO // FIELD_NOTE_042<br />SOURCE STATUS // NOT LIVE INTELLIGENCE</p></aside> }
-export function RitaSequencer() { const [coherent, setCoherent] = useState(false); return <div className="rita-visual"><EcosystemCanvas mode="rita" onSelect={() => setCoherent(true)} /><div className="rita-story" aria-live="polite">{coherent && <><span className="technical-note">SYS // COHERENT_PATTERN_DETECTED</span><strong>MINISTRY → POLICY → PROJECT → ENTERPRISE</strong><ProvenancePanel /></>}</div></div> }
-export function PerspectiveSection() { const [perspective, setPerspective] = useState('Entrepreneur'); const [selected, setSelected] = useState('particle-2'); const options = Object.keys(LENSES); return <><div className="tabs" role="tablist">{options.map((item) => <button key={item} role="tab" aria-selected={item === perspective} onClick={() => setPerspective(item)}>{item}</button>)}</div><div className="perspective-grid"><div className="perspective-canvas"><EcosystemCanvas mode="perspective" lens={perspective} onSelect={setSelected} /></div><div className="lens-panel"><span className="technical-note">ACTIVE LENS / {perspective.toUpperCase()}</span><h3>{perspective === 'Entrepreneur' ? 'Where could I enter?' : perspective === 'Investor' ? 'Where is momentum forming?' : perspective === 'Policy analyst' ? 'Where are coordination gaps?' : 'Who is already moving?'}</h3><p>Select a particle to inspect its role in this view.</p><div className="node-buttons">{['MINISTRY','POLICY','PROJECT','ENTERPRISE','PEOPLE','CAPITAL'].map((label, i) => <button className={selected === `particle-${[0,1,2,3,24,25][i]}` ? 'node-selected' : ''} key={label} onClick={() => setSelected(`particle-${[0,1,2,3,24,25][i]}`)}><span>○</span>{label}<ChevronRight size={14} /></button>)}</div></div></div></> }
-export const graphNodes = ANCHORS.map((node) => [node.id, node.label ?? ''] as const)
-export const ritaNodes = ['particle-0', 'particle-1', 'particle-2', 'particle-3']
+export function EcosystemField() { const active = useMemo(() => new Set<string>(), []); const field = useCanvasField(active, [], { drift: true }); return <div className="diagram-shell field-diagram"><canvas ref={field.canvasRef} aria-label="A quiet ecosystem field with latent clusters" role="img" onPointerMove={field.pick} onPointerLeave={() => {}} /><span className="diagram-caption">FIELD // latent structure</span></div> }
 
-export function EcosystemField() { return <EcosystemCanvas mode="ecosystem" /> }
-export function AtisField() { return <EcosystemCanvas mode="atis" /> }
-export function PerspectiveGraph({ perspective, onSelect }: { perspective: string; selected?: string; onSelect?: (value: string) => void }) { return <EcosystemCanvas mode="perspective" lens={perspective} onSelect={onSelect} /> }
-export function AtisLogo() { return <BrandMark atis compact /> }
-export function AksosLogo() { return <BrandMark /> }
+export function FragmentedField() { const [revealed, setRevealed] = useState(false); const active = useMemo(() => new Set(revealed ? ['p-0', 'p-5', 'p-18', 'p-31', 'p-45', 'p-60'] : []), [revealed]); const field = useCanvasField(active, revealed ? EDGES.slice(0, 5) : [], { labels: revealed }); return <div className="diagram-shell fragmented-diagram"><canvas ref={field.canvasRef} aria-label="Information fragments that can reveal context" role="img" onPointerMove={field.pick} /><div className="diagram-control"><button type="button" onClick={() => setRevealed((value) => !value)}>{revealed ? 'Reset fragments' : 'Reveal context'} <ChevronRight size={14} /></button><span>{revealed ? 'FRAGMENTATION → RELATIONSHIPS → CONTEXT' : 'DOCUMENT / POLICY / PROJECT / MARKET'}</span></div></div> }
+
+export function PerspectiveSection() { const [perspective, setPerspective] = useState<Perspective>('Investor'); const lens = PERSPECTIVES[perspective]; const active = useMemo(() => new Set([...lens.anchors, ...lens.secondary]), [lens]); const field = useCanvasField(active, lens.edges, { labels: true }); return <div className="perspective-system"><div className="tabs" role="tablist" aria-label="Ecosystem perspective"><span className="technical-note">ONE ECOSYSTEM / DIFFERENT QUESTIONS</span>{(Object.keys(PERSPECTIVES) as Perspective[]).map((item) => <button key={item} type="button" role="tab" aria-selected={item === perspective} onClick={() => setPerspective(item)}>{item}</button>)}</div><div className="perspective-grid"><div className="diagram-shell perspective-diagram"><canvas ref={field.canvasRef} aria-label={`Shared ecosystem through the ${perspective} lens`} role="img" onPointerMove={field.pick} /></div><aside className="lens-panel"><span className="technical-note">ACTIVE LENS // {perspective.toUpperCase()}</span><h3>{perspective === 'Investor' ? 'Where is momentum forming?' : perspective === 'Enterprise' ? 'Where could I enter?' : 'What evidence connects?'}</h3><p>The particles, coordinates and underlying relationships remain constant. Only emphasis changes.</p><button className="reset-button" type="button" onClick={() => setPerspective('Investor')}><RotateCcw size={14} /> Reset lens</button></aside></div></div> }
+
+const atisStages = ['RAW INFORMATION', 'EVIDENCE', 'FACT', 'ENTITIES', 'RELATIONSHIPS', 'CONTEXT', 'INTELLIGENCE']
+export function AtisProgression() { const [stage, setStage] = useState(0); return <div className="atis-progression"><div className="atis-material"><div className="material-fragments" data-stage={stage}>{Array.from({ length: 12 }, (_, i) => <span key={i} style={{ '--i': i } as React.CSSProperties} />)}</div><div className="material-structure">{stage >= 2 && <span>SUPPORTED STATEMENT</span>}{stage >= 3 && <span>MINISTRY · POLICY · PROJECT</span>}{stage >= 4 && <span>POLICY → PROJECT → ENTERPRISE</span>}{stage >= 5 && <span>WHY IT MATTERS HERE</span>}{stage >= 6 && <strong>CONTEXTUAL INTELLIGENCE</strong>}</div></div><div className="stage-controls"><span className="technical-note">STAGE {stage + 1} / 7</span><strong>{atisStages[stage]}</strong><button type="button" onClick={() => setStage((value) => value === atisStages.length - 1 ? 0 : value + 1)}>{stage === atisStages.length - 1 ? 'Restart transformation' : `Reveal ${atisStages[stage + 1] ?? 'next stage'}`} <ChevronRight size={14} /></button></div><div className="stage-list" role="list">{atisStages.map((item, index) => <button type="button" key={item} aria-current={index === stage} onClick={() => setStage(index)}>{String(index + 1).padStart(2, '0')} {item}</button>)}</div></div> }
+
+const sequence = ['EXPERIENCE', 'OBSERVATION', 'QUESTION', 'HYPOTHESIS']
+export function IntellectualHistory() { const [step, setStep] = useState(0); return <div className="sequence-diagram"><div className="sequence-track">{sequence.map((item, i) => <button type="button" key={item} className={i <= step ? 'is-active' : ''} onClick={() => setStep(i)}><span>{String(i + 1).padStart(2, '0')}</span>{item}{i < sequence.length - 1 && <i>↓</i>}</button>)}</div><p>{step === 3 ? 'A question became a hypothesis worth testing.' : 'Click each stage to follow the idea becoming a hypothesis.'}</p></div> }
+
+const provenance = [{ label: 'STORY', text: 'A possible pattern needs inspection.' }, { label: 'RELATIONSHIP', text: 'POLICY ↔ PROJECT' }, { label: 'FACT', text: 'Conceptual demonstration: the relationship is traceable.' }, { label: 'SOURCE', text: 'DEMO // FIELD_NOTE_042 — not live intelligence' }]
+export function ProvenanceChain() { const [selected, setSelected] = useState(0); return <div className="provenance-chain"><div className="provenance-steps">{provenance.map((item, i) => <button type="button" key={item.label} className={i === selected ? 'is-active' : ''} onClick={() => setSelected(i)}>{item.label}<ChevronRight size={14} /></button>)}</div><div className="provenance-detail" aria-live="polite"><span className="technical-note">TRACE // {provenance[selected].label}</span><strong>{provenance[selected].text}</strong></div></div> }
+
+export function RitaSequencer() { const [phase, setPhase] = useState(0); const steps = ['AMBIGUITY', 'EVALUATION', 'COHERENCE', 'STORY', 'PROVENANCE']; return <div className="rita-system"><div className={`rita-board phase-${phase}`}><div className="rita-clusters"><span /><span /><span /></div>{phase >= 2 && <div className="rita-chain"><b>MINISTRY</b><i>↓</i><b>POLICY</b><i>↓</i><b>PROJECT</b><i>↓</i><b>ENTERPRISE</b></div>}</div><div className="rita-controls"><span className="technical-note">RITA // {steps[phase]}</span><button type="button" onClick={() => setPhase((value) => value < 4 ? value + 1 : 0)}>{phase === 0 ? 'Evaluate coherence' : phase === 4 ? 'Replay evaluation' : `Continue to ${steps[phase + 1]}`} <ChevronRight size={14} /></button></div>{phase >= 3 && <div className="rita-result" aria-live="polite"><strong>SYS // COHERENT_PATTERN_DETECTED</strong><p>CONNECTION ≠ COHERENCE → COHERENCE → STORY</p>{phase === 4 && <ProvenanceChain />}</div>}</div> }
+
+export function PathwayFlow() { const [step, setStep] = useState(0); const items = ['CONTRIBUTE CONTEXT', 'DISCOVER', 'SELECTION', 'DEEPER PARTICIPATION', 'ATIS ACCESS WHERE APPROPRIATE']; return <div className="pathway-flow">{items.map((item, i) => <button type="button" className={i <= step ? 'is-active' : ''} key={item} onClick={() => setStep(i)}><span>{item}</span>{i < items.length - 1 && <i>↓</i>}</button>)}</div> }
 
 export const immutableGeometry = PARTICLES
-export const graphLenses = LENSES
+export const graphLenses = PERSPECTIVES
+export const graphNodes = PARTICLES.filter((particle) => particle.anchor).map((particle) => [particle.id, particle.label ?? ''] as const)
+export const ritaNodes = ['MINISTRY', 'POLICY', 'PROJECT', 'ENTERPRISE']
+export const EcosystemCanvas = EcosystemField
+export const AtisField = AtisProgression
+export const PerspectiveGraph = PerspectiveSection
+export const AtisLogo = () => null
+export const AksosLogo = () => null
+export function ProvenancePanel() { return <ProvenanceChain /> }
+export function BrandMark() { return null }
+export function useGraphState() { return { particles: PARTICLES, edges: EDGES } }
+
+export type { Perspective }
+
