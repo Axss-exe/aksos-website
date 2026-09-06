@@ -58,7 +58,9 @@ function useCanvasField(active: Set<string>, activeEdges: readonly [string, stri
   return { canvasRef, pick, hovered }
 }
 
-export function EcosystemField() { const active = useMemo(() => new Set<string>(), []); const field = useCanvasField(active, [], { drift: true }); return <div className="diagram-shell field-diagram"><canvas ref={field.canvasRef} aria-label="A quiet ecosystem field with latent clusters" role="img" onPointerMove={field.pick} onPointerLeave={() => {}} /><span className="diagram-caption">FIELD // latent structure</span></div> }
+export function CanvasContainer({ ariaLabel = 'Interactive AKSOS canvas diagram', caption = 'CANVAS // spatial reasoning' }: { ariaLabel?: string; caption?: string }) { const active = useMemo(() => new Set<string>(), []); const field = useCanvasField(active, [], { drift: true }); return <div className="diagram-shell canvas-container"><canvas ref={field.canvasRef} aria-label={ariaLabel} role="img" onPointerMove={field.pick} onPointerLeave={() => {}} /><span className="diagram-caption">{caption}</span></div> }
+
+export function EcosystemField() { return <CanvasContainer ariaLabel="A quiet ecosystem field with latent clusters" caption="FIELD // latent structure" /> }
 
 export function FragmentedField() { const [revealed, setRevealed] = useState(false); const active = useMemo(() => new Set(revealed ? ['p-0', 'p-5', 'p-18', 'p-31', 'p-45', 'p-60'] : []), [revealed]); const field = useCanvasField(active, revealed ? EDGES.slice(0, 5) : [], { labels: revealed }); return <div className="diagram-shell fragmented-diagram"><canvas ref={field.canvasRef} aria-label="Information fragments that can reveal context" role="img" onPointerMove={field.pick} /><div className="diagram-control"><button type="button" onClick={() => setRevealed((value) => !value)}>{revealed ? 'Reset fragments' : 'Reveal context'} <ChevronRight size={14} /></button><span>{revealed ? 'FRAGMENTATION → RELATIONSHIPS → CONTEXT' : 'DOCUMENT / POLICY / PROJECT / MARKET'}</span></div></div> }
 
