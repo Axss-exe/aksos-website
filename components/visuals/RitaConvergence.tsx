@@ -1,0 +1,4 @@
+'use client'
+import { useState } from 'react'
+const chain=['MINISTRY','POLICY','PROJECT','ENTERPRISE']
+export function RitaConvergence(){const [step,setStep]=useState(0);return <div className="rita-visual"><svg viewBox="0 0 100 72" role="img" aria-label="Candidate relationships converge into a coherent story"><path className="candidate-path" d="M5 15 C30 50 40 4 60 40 S82 10 96 58"/>{chain.map((label,i)=><g key={label} className={i<=step?'trace-active':''}><circle cx={15+i*23} cy="36" r="3"/><text x={15+i*23} y="24" textAnchor="middle">{label}</text>{i<3&&<line x1={18+i*23} y1="36" x2={35+i*23} y2="36"/>}</g>)}</svg><div className="visual-controls"><span>RITA // {step<2?'EVALUATING':'COHERENT STORY'}</span><button type="button" onClick={()=>setStep(step<3?step+1:0)}>{step===0?'Evaluate coherence':'Continue'} →</button></div>{step>=3&&<p className="annotation">SYS // COHERENT_PATTERN_DETECTED — conceptual demonstration</p>}</div>}

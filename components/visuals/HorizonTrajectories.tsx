@@ -1,0 +1,4 @@
+'use client'
+import { useState } from 'react'
+const paths=['ENERGY → INFRASTRUCTURE → INDUSTRIAL DEMAND','POLICY → CAPITAL → PROJECTS','RESEARCH → EVIDENCE → ACTION']
+export function HorizonTrajectories(){const [selected,setSelected]=useState(0);return <div className="horizon-visual"><svg viewBox="0 0 100 76" role="img" aria-label="Possible trajectories emerge from present conditions"><line x1="8" y1="64" x2="92" y2="64"/>{paths.map((path,i)=><path key={path} className={selected===i?'trajectory-active':''} d={`M8 64 C30 ${48-i*10} 52 ${56-i*18} 92 ${12+i*20}`}/>)}</svg><div className="trajectory-options">{paths.map((path,i)=><button key={path} aria-pressed={selected===i} onClick={()=>setSelected(i)}>Trajectory {i+1} →</button>)}</div><p className="annotation">{paths[selected]} // EMERGING SIGNAL, NOT PREDICTION</p></div>}

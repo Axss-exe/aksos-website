@@ -1,0 +1,1 @@
+export const zimbabweStory = { status: 'CONCEPTUAL DEMONSTRATION', stages: ['ENVIRONMENT','EVENT','RELATIONSHIPS','CONSEQUENCE','OPPORTUNITY'] as const, note: 'No live Zimbabwe intelligence is asserted. The visual demonstrates how a verified story would be assembled and inspected.' }

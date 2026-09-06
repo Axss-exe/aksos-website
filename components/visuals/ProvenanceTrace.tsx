@@ -1,0 +1,4 @@
+'use client'
+import { useState } from 'react'
+const nodes=['INSIGHT','INFERENCE','RELATIONSHIP','FACT','SOURCE']
+export function ProvenanceTrace(){const [depth,setDepth]=useState(0);return <div className="provenance-visual"><svg viewBox="0 0 100 70" role="img" aria-label="Trace an insight back to its source">{nodes.map((node,i)=><g key={node} className={i<=depth?'trace-active':''}><circle cx={12+i*19} cy={i%2?48:22} r="3"/><text x={12+i*19} y={i%2?63:12} textAnchor="middle">{node}</text>{i<4&&<line x1={15+i*19} y1={i%2?48:22} x2={28+i*19} y2={i%2?22:48}/>}</g>)}</svg><div className="visual-controls"><span>TRACE // FACT ≠ INFERENCE</span><button type="button" onClick={()=>setDepth(depth<4?depth+1:0)}>{depth===4?'Restart trace':'Trace backward'} →</button></div><p className="annotation">CONCEPTUAL DEMONSTRATION // evidence path shown structurally</p></div>}
